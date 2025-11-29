@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mensagens Recebidas</title>
+  <link rel="stylesheet" href="css/default.css" />
+  <style>
+    table { width:100%; border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align:left; }
+    th { background:#f4f4f4; }
+    .bold { font-weight: 700; }
+    .actions button { margin-right:6px; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <main>
+      <h2>Mensagens</h2>
+      <div id="mensagens-container">
+        <table id="tbl-mensagens">
+          <thead><tr><th>Nome</th><th>E-mail</th><th>Mensagem</th><th>Ações</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+
+  <script src="js/jquery-3.6.4.min.js"></script>
+  <script src="js/api.js"></script>
+
+  <script>
+  
+  const LS_KEY = 'mensagens_local_v1';
+
+  function _generateId(msg){
+    
+    return msg.id || msg._id || btoa((msg.nome||'') + '|' + (msg.email||'') + '|' + (msg.mensagem||'')).replace(/=+$/,'');
+  }
+
+  function loadAndRender(){
+    var apiMsgs = [];
+    try {
+      apiMsgs = obterMensagens() || [];
+    } catch(err){
+      console.error('Erro ao obter mensagens:', err);
+      apiMsgs = [];
+    }
+
+ 
+    var local = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
+
+    
+    apiMsgs.forEach(function(m){
+      var id = _generateId(m);
+      if(!local[id]){
+       
+        local[id] = { visualizada: false, original: m };
+      } else {
+        
+        local[id].original = m;
+      }
+    });
+
+    
+    localStorage.setItem(LS_KEY, JSON.stringify(local));
+
+    renderTable(local);
+  }
+
+  function renderTable(localStore){
+    var $tbody = $('#tbl-mensagens tbody');
+    $tbody.empty();
+    Object.keys(localStore).forEach(function(id){
+      var entry = localStore[id];
+      var m = entry.original;
+      var nome = m.nome || '';
+      var email = m.email || '';
+      var texto = m.mensagem || '';
+      var tr = $('<tr></tr>').attr('data-id', id);
+      var tdNome = $('<td></td>').text(nome);
+      var tdEmail = $('<td></td>').text(email);
+      var tdMsg = $('<td></td>');
+      var span = $('<span></span>').text(texto).addClass(entry.visualizada ? '' : 'bold').addClass('msg-text');
+      tdMsg.append(span);
+      var tdAcoes = $('<td></td>').addClass('actions');
+      var btnVisualizada = $('<button>Mensagem Visualizada</button>').on('click', function(){
+        if(confirm('Marcar esta mensagem como visualizada?')){
+          markAsViewed(id);
+        }
+      });
+      var btnExcluir = $('<button>Excluir Mensagem</button>').on('click', function(){
+        if(confirm('Tem certeza que deseja excluir esta mensagem?')){
+          deleteMessage(id);
+        }
+      });
+      tdAcoes.append(btnVisualizada, btnExcluir);
+      tr.append(tdNome, tdEmail, tdMsg, tdAcoes);
+      $tbody.append(tr);
+    });
+  }
+
+  function markAsViewed(id){
+    var local = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
+    if(!local[id]) return;
+    local[id].visualizada = true;
+    localStorage.setItem(LS_KEY, JSON.stringify(local));
+  
+    try {
+      if(typeof marcarMensagemVisualizada === 'function'){
+        
+        marcarMensagemVisualizada(local[id].original);
+      }
+    } catch(e){ console.warn(e); }
+    loadAndRender();
+  }
+
+  function deleteMessage(id){
+    var local = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
+    if(!local[id]) return;
+    
+    try {
+      if(typeof excluirMensagem === 'function'){
+        
+        var obj = local[id].original;
+        
+        try { excluirMensagem(obj.id || obj._id || id); }
+        catch(e){ excluirMensagem(obj); }
+      }
+    } catch(e){ console.warn('excluirMensagem não disponível ou falha:', e); }
+    
+    delete local[id];
+    localStorage.setItem(LS_KEY, JSON.stringify(local));
+    loadAndRender();
+  }
+
+  $(function(){
+    loadAndRender();
+
+    
+    setInterval(loadAndRender, 10000);
+  });
+  </script>
+</body>
+</html>
